@@ -1,0 +1,87 @@
+<head>
+  <style> body { margin: 0; } </style>
+
+  <script type="importmap">{ "imports": {
+    "three": "https://esm.sh/three",
+    "three/": "https://esm.sh/three/"
+  }}</script>
+
+<!--  <script type="module">import * as THREE from 'three'; window.THREE = THREE;</script>-->
+<!--  <script src="../../dist/three-hilbert.js" defer></script>-->
+</head>
+
+<body>
+  <div id="chart"></div>
+
+  <script type="module">
+    import ThreeHilbert from 'https://esm.sh/three-hilbert?external=three';
+    import * as THREE from 'three';
+    import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js?external=three';
+
+
+    // Gen random data
+    const N_CAT = 14;
+    const MAX_VAL = 100;
+    const data = [...Array(N_CAT)].map((_, i) => ({
+      name: `Series ${i+1}`,
+      val: Math.round(Math.random() * MAX_VAL)
+    }));
+
+    //
+
+    const hilbertOrder = 5;
+    const hilbertLength = Math.pow(8, hilbertOrder);
+
+    const dataSum = data.map(({ val }) => val).reduce((acc, val) => acc + val, 0);
+    const getHilbertVal = val => Math.round(val / dataSum * hilbertLength);
+
+    let carry = 0;
+    const hilbertData = data.map(({ val, ...rest }) => {
+      const d = {
+        start: carry,
+        length: getHilbertVal(val),
+        val,
+        ...rest
+      };
+      carry += d.length;
+      return d;
+    });
+
+    const Chart = new ThreeHilbert()
+      .order(hilbertOrder)
+      .padding(0.5)
+      .data(hilbertData);
+
+    // Setup renderer
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    document.getElementById('chart').appendChild(renderer.domElement);
+
+    // Setup scene
+    const scene = new THREE.Scene();
+    scene.add(Chart);
+    scene.add(new THREE.AmbientLight(0xcccccc, Math.PI));
+    scene.add(new THREE.DirectionalLight(0xffffff, 0.6));
+
+    // Setup camera
+    const camera = new THREE.PerspectiveCamera();
+    camera.far = 10000;
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    camera.position.x = 300;
+    camera.position.y = 300;
+    camera.position.z = 300;
+
+    // Add camera controls
+    const tbControls = new TrackballControls(camera, renderer.domElement);
+
+    // Kick-off renderer
+    (function animate() { // IIFE
+      // Frame cycle
+      tbControls.update();
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
