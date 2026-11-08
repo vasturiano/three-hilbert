@@ -46,6 +46,7 @@ All properties are getter/setters: call a method without an argument to read its
 | `label([accessor])` | Datum value used to label and group segments for automatic coloring. Accepts a constant, property name, or function of the datum. | `'name'` |
 | `labelColor([accessor])` | Label color accessor. | `'white'` |
 | `simplifyCurves([boolean])` | Whether to simplify the segment geometry whenever possible, to improve rendering performance. | `true` |
+| `useInstancedMeshes([boolean])` | Whether to render compatible segments with `THREE.InstancedMesh` to reduce draw calls. Segments that cannot be instanced use regular meshes. | `false` |
 
 ### Methods
 
