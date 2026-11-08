@@ -2,14 +2,15 @@ import Kapsule from 'kapsule';
 import accessorFn from 'accessor-fn';
 
 import * as three from 'three';
-import ThreeHilbertGeometry from 'three-hilbert-geometry';
-import SpriteText from 'three-spritetext';
+import HilbertGeometry from 'three-hilbert-geometry';
 import { scaleOrdinal as d3ScaleOrdinal } from 'd3-scale';
 import { schemePaired as d3SchemePaired } from 'd3-scale-chromatic';
 
-import { emptyObject } from './utils/gc';
+import { deallocate, emptyObject } from './utils/gc';
 import ThreeDigest from './utils/digest';
-import { colorAlpha, colorStr2Hex } from "./utils/color-utils";
+import { colorAlpha, colorStr2Hex } from './utils/color-utils';
+
+import createInstancedHilbertMeshes from './instanced-hilbert-meshes';
 
 const SCALE = 100;
 
@@ -21,17 +22,17 @@ const ThreeHilbert = Kapsule({
     color: {},
     label: { default: 'name' },
     labelColor: { default: () => 'white' },
-    simplifyCurves: { default: true }
+    simplifyCurves: { default: true },
+    useInstancedMeshes: { default: false }
   },
   methods: {
-    getVectorAtVal: (state, val) => {
-      const g = new ThreeHilbertGeometry(state.order, val, 1);
+    getPositionAtVal: (state, val) => {
+      const g = new HilbertGeometry(state.order, val, 1);
       g.computeBoundingSphere();
-      const vec = g.boundingSphere.center.clone().multiplyScalar(SCALE);
-      return vec;
+      return g.boundingSphere.center.clone().multiplyScalar(SCALE);
     },
     getRangeBbox: (state, start, length) => {
-      const g = new ThreeHilbertGeometry(state.order, start, length);
+      const g = new HilbertGeometry(state.order, start, length);
       g.computeBoundingBox();
       const bbox = g.boundingBox.clone();
       bbox.min.multiplyScalar(SCALE);
@@ -40,7 +41,8 @@ const ThreeHilbert = Kapsule({
     }
   },
   stateInit() { return {
-    defaultColorScale: d3ScaleOrdinal(d3SchemePaired)
+    defaultColorScale: d3ScaleOrdinal(d3SchemePaired),
+    instancedMeshes: []
   } },
 
   init: function(threeObj, state) {
@@ -52,8 +54,7 @@ const ThreeHilbert = Kapsule({
     state.dataMapper = new ThreeDigest(threeObj, { objBindAttr: '__threeObjHilbert' })
       .onCreateObj(() => {
         const obj = new three.Group(); // container
-        obj.add(new three.Mesh()); // hilbert curve
-        // obj.add(new SpriteText()); // label
+        obj.add(new three.Mesh()) // hilbert curve
 
         obj.scale.set(SCALE, SCALE, SCALE);
         return obj;
@@ -66,45 +67,51 @@ const ThreeHilbert = Kapsule({
     const labelAccessor = accessorFn(state.label);
     const labelColorAccessor = accessorFn(state.labelColor);
 
-    const materialCache = {};
+    const {
+      fallbackData,
+      geometries,
+      meshes: instancedMeshes
+    } = createInstancedHilbertMeshes({
+      useInstancing: state.useInstancedMeshes,
+      data: state.data,
+      order: state.order,
+      paddingAccessor,
+      colorAccessor,
+      labelAccessor,
+      defaultColorScale: state.defaultColorScale,
+      simplifyCurves: state.simplifyCurves,
+      SCALE
+    });
 
-    const sd = new Date();
+    state.instancedMeshes.forEach(mesh => {
+      state.scene.remove(mesh);
+      deallocate(mesh);
+    });
+    state.instancedMeshes = instancedMeshes;
+    instancedMeshes.forEach(mesh => state.scene.add(mesh));
+
+    const materialCache = new Map();
     state.dataMapper
       .onUpdateObj((obj, d) => {
-        const [hilbertObj, labelObj] = obj.children;
+        const [hilbertObj] = obj.children;
 
         // update color
         const color = colorAccessor?.(d) || (state.defaultColorScale(labelAccessor(d) || ''));
-        if (!materialCache[color]) {
+        let material = materialCache.get(color);
+        if (!material) {
           const opacity = colorAlpha(color);
-          const material = materialCache[color] = new three.MeshLambertMaterial();
+          material = new three.MeshLambertMaterial();
           material.color.set(colorStr2Hex(color));
           material.transparent = opacity < 1;
           material.opacity = opacity;
+          materialCache.set(color, material);
         }
-        hilbertObj.material?.dispose();
-        hilbertObj.material = materialCache[color];
+        hilbertObj.material = material;
 
         hilbertObj.geometry?.dispose();
-        hilbertObj.geometry = new ThreeHilbertGeometry(
-          state.order,
-          d.start,
-          d.length,
-          { padding: paddingAccessor(d), simplifyCurves: state.simplifyCurves }
-        );
-
-        // console.log(getCurvePath(hilbertObj.geometry.parameters.points), hilbertObj.geometry.parameters.points);
-
-        /*
-        // update label
-        labelObj.text = labelAccessor?.(d) || '';
-        labelObj.color = labelColorAccessor(d);
-        labelObj.textHeight = 0.8 * d.length / Math.pow(8, state.order);
-        hilbertObj.geometry.computeBoundingSphere();
-        labelObj.position.copy(hilbertObj.geometry.boundingSphere.center);
-         */
+        hilbertObj.geometry = geometries.get(d);
       })
-      .digest(state.data);
+      .digest(fallbackData);
   }
 });
 
