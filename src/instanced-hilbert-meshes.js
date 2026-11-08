@@ -204,8 +204,9 @@ function getSimpleHilbertGeometry(order, start, length, padding, simplifyCurves)
   let first = isBigInt ? start : Math.round(start);
   let pointCount = isBigInt ? length : Math.round(length);
   const unit = isBigInt ? 8n : 8;
+  const zero = isBigInt ? 0n : 0;
   if (simplifyCurves) {
-    while (pointOrder > 0 && first % unit === 0 && pointCount % unit === 0) {
+    while (pointOrder > 0 && first % unit === zero && pointCount % unit === zero) {
       first /= unit;
       pointCount /= unit;
       pointOrder--;
