@@ -20,7 +20,7 @@ then
 const curveOrder = 4;
 const numCells = 8 ** curveOrder;
 
-const hilbert = new ThreeHilbert()
+const myHilbert = new ThreeHilbert()
   .order(curveOrder)
   .data([
     { name: 'Group A', start: 0, length: numCells / 2 },
@@ -28,7 +28,7 @@ const hilbert = new ThreeHilbert()
   ]);
 
 const myScene = new THREE.Scene();
-myScene.add(myGraph);
+myScene.add(myHilbert);
 ```
 
 The ranges in `data` refer to positions along the curve. For an order of `n`, the curve has `8 ** n` positions. `start` is the first position of a segment and `length` is its length. Assign ranges that fit within the curve and do not overlap if you want each position to represent just one datum.
@@ -51,7 +51,7 @@ All properties are getter/setters: call a method without an argument to read its
 
 | Method | Description |
 | --- | --- |
-| `getVectorAtVal(value)` | Returns a `THREE.Vector3` at a position along the curve. |
+| `getPositionAtVal(value)` | Returns a `THREE.Vector3` at a position along the curve. |
 | `getRangeBbox(start, length)` | Returns a `THREE.Box3` bounding the specified range. |
 
 ## ❤️ Support This Project
