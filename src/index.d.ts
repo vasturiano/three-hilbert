@@ -34,7 +34,10 @@ declare class ThreeHilbert<T extends ThreeHilbertData = ThreeHilbertData> extend
   simplifyCurves(): boolean;
   simplifyCurves(value: boolean): this;
 
-  getVectorAtVal(value: number | bigint): Vector3;
+  useInstancedMeshes(): boolean;
+  useInstancedMeshes(value: boolean): this;
+
+  getPositionAtVal(value: number | bigint): Vector3;
   getRangeBbox(start: number | bigint, length: number | bigint): Box3;
 }
 
