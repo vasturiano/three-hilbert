@@ -1784,6 +1784,11 @@ three-hilbert-geometry@1:
   resolved "https://registry.yarnpkg.com/three-hilbert-geometry/-/three-hilbert-geometry-1.0.2.tgz#9b3d9aa7f914b641ee12d25ca5a567b64d077b3c"
   integrity sha512-cXv7eeKfzpRfChnJUQnrdeQM8lsbmo7CF5oVACoYYpvjr+gic2rLPuxToh06c/KFa6S7orsKN9FkNQMTG4BFgw==
 
+three@^0.187.0:
+  version "0.187.0"
+  resolved "https://registry.yarnpkg.com/three/-/three-0.187.0.tgz#face29ee2de9bcc31a1b573a76f224e35e0b2894"
+  integrity sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA==
+
 tinycolor2@1:
   version "1.6.0"
   resolved "https://registry.yarnpkg.com/tinycolor2/-/tinycolor2-1.6.0.tgz#f98007460169b0263b97072c5ae92484ce02d09e"

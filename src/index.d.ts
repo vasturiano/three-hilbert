@@ -1,4 +1,4 @@
-import { Box3, Group, Vector3 } from 'three';
+import { Box3, Camera, Group, Vector3 } from 'three';
 
 export interface ThreeHilbertData {
   start: number | bigint;
@@ -36,6 +36,8 @@ declare class ThreeHilbert<T extends ThreeHilbertData = ThreeHilbertData> extend
 
   useInstancedMeshes(): boolean;
   useInstancedMeshes(value: boolean): this;
+
+  setPointOfView(camera: Camera): number;
 
   getPositionAtVal(value: number | bigint): Vector3;
   getRangeBbox(start: number | bigint, length: number | bigint): Box3;
