@@ -45,7 +45,7 @@ All properties are getter/setters: call a method without an argument to read its
 | `paddingAbsolute([accessor])` | Per-segment absolute padding as a fraction of the full Hilbert width. Clamped to half the line width. Accepts a constant, a property name, or a function of the datum. | `0` |
 | `color([accessor])` | Segment color as a constant, property name, or function of the datum. Without a color, segments are colored by their `label` value using an ordinal palette. | Automatic |
 | `label([accessor])` | Datum value used to label and group segments for automatic coloring. Accepts a constant, property name, or function of the datum. | `'name'` |
-| `labelColor([accessor])` | Label color accessor. A falsy value will hide the label. | `'white'` |
+| `labelColor([accessor])` | Label color accessor. A falsy value disables the label. | `'white'` |
 | `simplifyCurves([boolean])` | Whether to simplify the segment geometry whenever possible, to improve rendering performance. | `true` |
 | `useInstancedMeshes([boolean])` | Whether to render compatible segments with `THREE.InstancedMesh` to reduce draw calls. It's recommended to enable this for very large datasets. Segments that cannot be instanced use regular meshes. | `false` |
 
