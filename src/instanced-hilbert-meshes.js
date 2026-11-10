@@ -2,6 +2,7 @@ import * as three from 'three';
 import HilbertGeometry from 'three-hilbert-geometry';
 
 import { colorAlpha, colorStr2Hex } from './utils/color-utils.js';
+import { addLabelAttributes, createLabelMaterial, mapLabelUVs } from './utils/label-utils.js';
 
 const CHILD_PERMUTATIONS = [
   [0, 3, 4, 7, 6, 5, 2, 1],
@@ -44,8 +45,10 @@ function createInstancedHilbertMeshes({
   data,
   order,
   paddingAccessor,
+  paddingAbsoluteAccessor,
   colorAccessor,
   labelAccessor,
+  labelAtlas,
   defaultColorScale,
   simplifyCurves,
   SCALE
@@ -59,41 +62,53 @@ function createInstancedHilbertMeshes({
 
   data.forEach(d => {
     const padding = paddingAccessor(d);
+    const paddingAbsolute = paddingAbsoluteAccessor(d);
+    const labelInfo = labelAtlas?.labels.get(d);
+    const label = labelInfo?.text ?? labelAccessor(d);
     if (!useInstancing) {
-      geometries.set(d, createGeometry(order, d, padding, simplifyCurves));
+      const geometry = createGeometry(order, d, padding, paddingAbsolute, simplifyCurves, Boolean(labelAtlas));
+      if (labelAtlas) addLabelAttributes(geometry, [{ info: labelInfo }]);
+      geometries.set(d, geometry);
       fallbackData.push(d);
       return;
     }
 
-    const description = getSimpleHilbertGeometry(order, d.start, d.length, padding, simplifyCurves);
+    const description = getSimpleHilbertGeometry(order, d.start, d.length, padding, paddingAbsolute, simplifyCurves);
     if (!description) {
-      geometries.set(d, createGeometry(order, d, padding, simplifyCurves));
+      const geometry = createGeometry(order, d, padding, paddingAbsolute, simplifyCurves, Boolean(labelAtlas));
+      if (labelAtlas) addLabelAttributes(geometry, [{ info: labelInfo }]);
+      geometries.set(d, geometry);
       fallbackData.push(d);
       return;
     }
 
-    const color = colorAccessor?.(d) || defaultColorScale(labelAccessor(d) || '');
+    const color = colorAccessor?.(d) || defaultColorScale(label || '');
     const { points, width, scale } = description;
     const key = getCurvePath(points);
-    const geometryKey = `${key}|${width / scale}`;
+    const geometryKey = `${key}|${width / scale}|${Boolean(labelAtlas)}`;
     usedGeometryKeys.add(geometryKey);
 
     let templateGeometry = geometryCache.get(geometryKey);
     if (!templateGeometry) {
-      const geometry = createGeometry(order, d, padding, simplifyCurves);
+      const geometry = createGeometry(order, d, padding, paddingAbsolute, simplifyCurves, Boolean(labelAtlas));
       templateGeometry = createTemplateGeometry(geometry, points[0], scale);
       geometryCache.set(geometryKey, templateGeometry);
       geometry.dispose();
     }
 
-    let material = instanceMaterialCache.get(color);
+    const materialKey = color;
+    let material = instanceMaterialCache.get(materialKey);
     if (!material) {
-      const opacity = colorAlpha(color);
-      material = new three.MeshLambertMaterial();
-      material.color.set(colorStr2Hex(color));
-      material.transparent = opacity < 1;
-      material.opacity = opacity;
-      instanceMaterialCache.set(color, material);
+      if (!labelAtlas) {
+        const opacity = colorAlpha(color);
+        material = new three.MeshLambertMaterial();
+        material.color.set(colorStr2Hex(color));
+        material.transparent = opacity < 1;
+        material.opacity = opacity;
+      } else {
+        material = createLabelMaterial(color, labelAtlas);
+      }
+      instanceMaterialCache.set(materialKey, material);
     }
 
     let colorBatches = batches.get(geometryKey);
@@ -102,16 +117,17 @@ function createInstancedHilbertMeshes({
       batches.set(geometryKey, colorBatches);
     }
 
-    let batch = colorBatches.get(color);
+    let batch = colorBatches.get(materialKey);
     if (!batch) {
       batch = {
         geometry: templateGeometry,
         material,
         transforms: new Float32Array(256),
         count: 0,
-        data: []
+        data: [],
+        labelRecords: []
       };
-      colorBatches.set(color, batch);
+      colorBatches.set(materialKey, batch);
     }
 
     const instanceScale = scale * SCALE;
@@ -128,6 +144,7 @@ function createInstancedHilbertMeshes({
     transforms[transformOffset + 3] = points[0].z * SCALE;
     batch.count++;
     batch.data.push(d);
+    if (labelAtlas) batch.labelRecords.push({ info: labelInfo });
   });
 
   geometryCache.forEach((geometry, key) => {
@@ -140,7 +157,9 @@ function createInstancedHilbertMeshes({
   const meshes = [];
   batches.forEach(colorBatches => {
     colorBatches.forEach(batch => {
-      const mesh = new three.InstancedMesh(batch.geometry, batch.material, batch.count);
+      const geometry = batch.geometry.clone();
+      if (labelAtlas) addLabelAttributes(geometry, batch.labelRecords, true);
+      const mesh = new three.InstancedMesh(geometry, batch.material, batch.count);
       const matrices = mesh.instanceMatrix.array;
       for (let i = 0; i < batch.count; i++) {
         const transformOffset = i * 4;
@@ -160,6 +179,7 @@ function createInstancedHilbertMeshes({
       meshes.push(mesh);
     });
   });
+  geometryCache.forEach(geometry => geometry.dispose());
 
   return {
     fallbackData,
@@ -168,8 +188,10 @@ function createInstancedHilbertMeshes({
   };
 }
 
-function createGeometry(order, datum, padding, simplifyCurves) {
-  return new HilbertGeometry(order, datum.start, datum.length, { padding, simplifyCurves });
+function createGeometry(order, datum, padding, paddingAbsolute, simplifyCurves, labeled) {
+  const geometry = new HilbertGeometry(order, datum.start, datum.length, { padding, paddingAbsolute, simplifyCurves });
+  if (labeled) mapLabelUVs(geometry);
+  return geometry;
 }
 
 function createTemplateGeometry(geometry, origin, scale) {
@@ -195,7 +217,7 @@ function createTemplateGeometry(geometry, origin, scale) {
   return templateGeometry;
 }
 
-function getSimpleHilbertGeometry(order, start, length, padding, simplifyCurves) {
+function getSimpleHilbertGeometry(order, start, length, padding, paddingAbsolute, simplifyCurves) {
   const isBigInt = typeof start === 'bigint' && typeof length === 'bigint';
   if (!Number.isInteger(order) || (typeof start === 'bigint') !== (typeof length === 'bigint')) return null;
   if (!isBigInt && (!Number.isFinite(start) || !Number.isFinite(length))) return null;
@@ -214,7 +236,7 @@ function getSimpleHilbertGeometry(order, start, length, padding, simplifyCurves)
   }
 
   const cellSize = 1 / 2 ** (pointOrder - 1);
-  const width = cellSize * (1 - Math.min(1, padding));
+  const width = (cellSize - Math.min(paddingAbsolute, cellSize * 0.5)) * (1 - Math.min(1, padding));
   if (!(width > 0) || !Number.isFinite(width)) return null;
 
   if (pointOrder <= 0) {

@@ -9,6 +9,7 @@ import { schemePaired as d3SchemePaired } from 'd3-scale-chromatic';
 import { deallocate, emptyObject } from './utils/gc';
 import ThreeDigest from './utils/digest';
 import { colorAlpha, colorStr2Hex } from './utils/color-utils';
+import { createLabelAtlas, createLabelMaterial } from './utils/label-utils';
 
 import createInstancedHilbertMeshes from './instanced-hilbert-meshes';
 
@@ -19,6 +20,7 @@ const ThreeHilbert = Kapsule({
     order: { default: 4 }, // 0-4096 default
     data: { default: [] },
     padding: { default: 0 },
+    paddingAbsolute: { default: 0 },
     color: {},
     label: { default: 'name' },
     labelColor: { default: () => 'lavender' },
@@ -43,7 +45,8 @@ const ThreeHilbert = Kapsule({
   },
   stateInit() { return {
     defaultColorScale: d3ScaleOrdinal(d3SchemePaired),
-    instancedMeshes: []
+    instancedMeshes: [],
+    labelAtlas: null
   } },
 
   init: function(threeObj, state) {
@@ -64,9 +67,13 @@ const ThreeHilbert = Kapsule({
   update: function(state, changedProps) {
     // Data accessors
     const paddingAccessor = accessorFn(state.padding);
+    const paddingAbsoluteAccessor = accessorFn(state.paddingAbsolute);
     const colorAccessor = accessorFn(state.color);
     const labelAccessor = accessorFn(state.label);
     const labelColorAccessor = accessorFn(state.labelColor);
+    const previousLabelAtlas = state.labelAtlas;
+    const labelAtlas = createLabelAtlas(state.data, labelAccessor, labelColorAccessor);
+    state.labelAtlas = labelAtlas;
 
     const {
       fallbackData,
@@ -77,8 +84,10 @@ const ThreeHilbert = Kapsule({
       data: state.data,
       order: state.order,
       paddingAccessor,
+      paddingAbsoluteAccessor,
       colorAccessor,
       labelAccessor,
+      labelAtlas,
       defaultColorScale: state.defaultColorScale,
       simplifyCurves: state.simplifyCurves,
       SCALE
@@ -97,15 +106,20 @@ const ThreeHilbert = Kapsule({
         const [hilbertObj] = obj.children;
 
         // update color
-        const color = colorAccessor?.(d) || (state.defaultColorScale(labelAccessor(d) || ''));
-        let material = materialCache.get(color);
-        if (!material) {
+        const label = labelAtlas?.labels.get(d)?.text ?? labelAccessor(d);
+        const color = colorAccessor?.(d) || state.defaultColorScale(label || '');
+        const materialKey = color;
+        let material = materialCache.get(materialKey);
+        if (!material && labelAtlas) {
+          material = createLabelMaterial(color, labelAtlas);
+          materialCache.set(materialKey, material);
+        } else if (!material) {
           const opacity = colorAlpha(color);
           material = new three.MeshLambertMaterial();
           material.color.set(colorStr2Hex(color));
           material.transparent = opacity < 1;
           material.opacity = opacity;
-          materialCache.set(color, material);
+          materialCache.set(materialKey, material);
         }
         hilbertObj.material = material;
 
@@ -113,6 +127,11 @@ const ThreeHilbert = Kapsule({
         hilbertObj.geometry = geometries.get(d);
       })
       .digest(fallbackData);
+
+    if (previousLabelAtlas) {
+      previousLabelAtlas.glyphTexture.dispose();
+      previousLabelAtlas.labelTexture.dispose();
+    }
   }
 });
 

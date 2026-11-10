@@ -22,14 +22,17 @@ declare class ThreeHilbert<T extends ThreeHilbertData = ThreeHilbertData> extend
   padding(): Accessor<T, number>;
   padding(value: Accessor<T, number>): this;
 
+  paddingAbsolute(): Accessor<T, number>;
+  paddingAbsolute(value: Accessor<T, number>): this;
+
   color(): Accessor<T, string | number> | null;
   color(value: Accessor<T, string | number> | null): this;
 
   label(): Accessor<T, string>;
   label(value: Accessor<T, string>): this;
 
-  labelColor(): Accessor<T, string | number>;
-  labelColor(value: Accessor<T, string | number>): this;
+  labelColor(): Accessor<T, string | number | false>;
+  labelColor(value: Accessor<T, string | number | false>): this;
 
   simplifyCurves(): boolean;
   simplifyCurves(value: boolean): this;
