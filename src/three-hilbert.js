@@ -6,12 +6,11 @@ import HilbertGeometry from 'three-hilbert-geometry';
 import { scaleOrdinal as d3ScaleOrdinal } from 'd3-scale';
 import { schemePaired as d3SchemePaired } from 'd3-scale-chromatic';
 
-import { deallocate, emptyObject } from './utils/gc';
+import { emptyObject } from './utils/gc';
 import ThreeDigest from './utils/digest';
-import { colorAlpha, colorStr2Hex } from './utils/color-utils';
-import { createLabelAtlas, createLabelMaterial } from './utils/label-utils';
+import LabelAtlas from './utils/label-atlas';
 
-import createInstancedHilbertMeshes from './instanced-hilbert-meshes';
+import createHilbertGeometries from './instanced-hilbert-meshes';
 
 const SCALE = 100;
 
@@ -44,9 +43,7 @@ const ThreeHilbert = Kapsule({
     }
   },
   stateInit() { return {
-    defaultColorScale: d3ScaleOrdinal(d3SchemePaired),
-    instancedMeshes: [],
-    labelAtlas: null
+    defaultColorScale: d3ScaleOrdinal(d3SchemePaired)
   } },
 
   init: function(threeObj, state) {
@@ -54,15 +51,17 @@ const ThreeHilbert = Kapsule({
 
     // Main three object to manipulate
     state.scene = threeObj;
+    state.scene.scale.set(SCALE, SCALE, SCALE);
 
-    state.dataMapper = new ThreeDigest(threeObj, { objBindAttr: '__threeObjHilbert' })
-      .onCreateObj(() => {
-        const obj = new three.Group(); // container
-        obj.add(new three.Mesh()) // hilbert curve
+    const instancedG = state.instancedG = new three.Group();
+    state.scene.add(instancedG);
+    state.instancedDataMapper = new ThreeDigest(instancedG, { objBindAttr: '__threeObjHilbert' })
+      .onCreateObj(mesh => mesh);
 
-        obj.scale.set(SCALE, SCALE, SCALE);
-        return obj;
-      });
+    const fallbackG = new three.Group();
+    state.scene.add(fallbackG);
+    state.fallbackDataMapper = new ThreeDigest(fallbackG, { objBindAttr: '__threeObjHilbert' })
+      .onCreateObj(() => new three.Mesh());
   },
   update: function(state, changedProps) {
     // Data accessors
@@ -71,67 +70,79 @@ const ThreeHilbert = Kapsule({
     const colorAccessor = accessorFn(state.color);
     const labelAccessor = accessorFn(state.label);
     const labelColorAccessor = accessorFn(state.labelColor);
-    const previousLabelAtlas = state.labelAtlas;
-    const labelAtlas = createLabelAtlas(state.data, labelAccessor, labelColorAccessor);
-    state.labelAtlas = labelAtlas;
 
-    const {
-      fallbackData,
-      geometries,
-      meshes: instancedMeshes
-    } = createInstancedHilbertMeshes({
+    const labelAtlas = new LabelAtlas(state.data, labelAccessor, labelColorAccessor);
+
+    const materialCache = new Map();
+    const getColor = d => colorAccessor?.(d) || state.defaultColorScale(labelAccessor(d) || '');
+    const getMaterial = color => {
+      let material = materialCache.get(color);
+      if (!material) {
+        material = labelAtlas.createMaterial(color);
+        materialCache.set(color, material);
+      }
+      return material;
+    }
+
+    const { instancedGeometries, fallbackGeometries } = createHilbertGeometries({
       useInstancing: state.useInstancedMeshes,
       data: state.data,
       order: state.order,
       paddingAccessor,
       paddingAbsoluteAccessor,
-      colorAccessor,
-      labelAccessor,
-      labelAtlas,
-      defaultColorScale: state.defaultColorScale,
-      simplifyCurves: state.simplifyCurves,
-      SCALE
+      simplifyCurves: state.simplifyCurves
     });
 
-    state.instancedMeshes.forEach(mesh => {
-      state.scene.remove(mesh);
-      deallocate(mesh);
-    });
-    state.instancedMeshes = instancedMeshes;
-    instancedMeshes.forEach(mesh => state.scene.add(mesh));
-
-    const materialCache = new Map();
-    state.dataMapper
-      .onUpdateObj((obj, d) => {
-        const [hilbertObj] = obj.children;
-
-        // update color
-        const label = labelAtlas?.labels.get(d)?.text ?? labelAccessor(d);
-        const color = colorAccessor?.(d) || state.defaultColorScale(label || '');
-        const materialKey = color;
-        let material = materialCache.get(materialKey);
-        if (!material && labelAtlas) {
-          material = createLabelMaterial(color, labelAtlas);
-          materialCache.set(materialKey, material);
-        } else if (!material) {
-          const opacity = colorAlpha(color);
-          material = new three.MeshLambertMaterial();
-          material.color.set(colorStr2Hex(color));
-          material.transparent = opacity < 1;
-          material.opacity = opacity;
-          materialCache.set(materialKey, material);
+    const instancedMeshes = [];
+    instancedGeometries.forEach(geometryBatch => {
+      const colorBatches = new Map();
+      geometryBatch.instances.forEach(instance => {
+        // split by color
+        const color = getColor(instance.data);
+        let batch = colorBatches.get(color);
+        if (!batch) {
+          batch = { material: getMaterial(color), instances: [] };
+          colorBatches.set(color, batch);
         }
-        hilbertObj.material = material;
+        batch.instances.push(instance);
+      });
 
-        hilbertObj.geometry?.dispose();
-        hilbertObj.geometry = geometries.get(d);
+      colorBatches.forEach(({ material, instances }) => {
+        const geometry = geometryBatch.geometry.clone();
+        labelAtlas.tagGeometry(geometry, instances.map(instance => instance.data), true);
+
+        const mesh = new three.InstancedMesh(geometry, material, instances.length);
+        const matrices = mesh.instanceMatrix.array;
+        instances.forEach(({ scale, position }, i) => {
+          const matrixOffset = i * 16;
+          matrices[matrixOffset] = scale;
+          matrices[matrixOffset + 5] = scale;
+          matrices[matrixOffset + 10] = scale;
+          matrices[matrixOffset + 12] = position.x;
+          matrices[matrixOffset + 13] = position.y;
+          matrices[matrixOffset + 14] = position.z;
+          matrices[matrixOffset + 15] = 1;
+        });
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.computeBoundingSphere();
+        mesh.__data = instances.map(instance => instance.data);
+        instancedMeshes.push(mesh);
+      });
+      geometryBatch.geometry.dispose();
+    });
+
+    state.instancedDataMapper.digest(instancedMeshes);
+
+    [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d]));
+    state.fallbackDataMapper
+      .onUpdateObj((obj, d) => {
+        obj.geometry?.dispose();
+        obj.geometry = fallbackGeometries.get(d);
+        obj.material = getMaterial(getColor(d));
       })
-      .digest(fallbackData);
+      .digest([...fallbackGeometries.keys()]);
 
-    if (previousLabelAtlas) {
-      previousLabelAtlas.glyphTexture.dispose();
-      previousLabelAtlas.labelTexture.dispose();
-    }
+    labelAtlas.dispose();
   }
 });
 
