@@ -10,7 +10,7 @@ import { emptyObject } from './utils/gc';
 import ThreeDigest from './utils/digest';
 import LabelAtlas from './utils/label-atlas';
 
-import createHilbertGeometries from './instanced-hilbert-meshes';
+import createHilbertGeometries from './instanced-hilbert-geometries.js';
 
 const SCALE = 100;
 
@@ -70,19 +70,9 @@ const ThreeHilbert = Kapsule({
     const colorAccessor = accessorFn(state.color);
     const labelAccessor = accessorFn(state.label);
     const labelColorAccessor = accessorFn(state.labelColor);
+    const getColor = d => colorAccessor?.(d) || state.defaultColorScale(labelAccessor(d) || '');
 
     const labelAtlas = new LabelAtlas(state.data, labelAccessor, labelColorAccessor);
-
-    const materialCache = new Map();
-    const getColor = d => colorAccessor?.(d) || state.defaultColorScale(labelAccessor(d) || '');
-    const getMaterial = color => {
-      let material = materialCache.get(color);
-      if (!material) {
-        material = labelAtlas.createMaterial(color);
-        materialCache.set(color, material);
-      }
-      return material;
-    }
 
     const { instancedGeometries, fallbackGeometries } = createHilbertGeometries({
       useInstancing: state.useInstancedMeshes,
@@ -101,7 +91,7 @@ const ThreeHilbert = Kapsule({
         const color = getColor(instance.data);
         let batch = colorBatches.get(color);
         if (!batch) {
-          batch = { material: getMaterial(color), instances: [] };
+          batch = { material: labelAtlas.getMaterial(color), instances: [] };
           colorBatches.set(color, batch);
         }
         batch.instances.push(instance);
@@ -138,7 +128,7 @@ const ThreeHilbert = Kapsule({
       .onUpdateObj((obj, d) => {
         obj.geometry?.dispose();
         obj.geometry = fallbackGeometries.get(d);
-        obj.material = getMaterial(getColor(d));
+        obj.material = labelAtlas.getMaterial(getColor(d));
       })
       .digest([...fallbackGeometries.keys()]);
 

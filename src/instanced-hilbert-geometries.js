@@ -1,23 +1,18 @@
 import * as three from 'three';
 import HilbertGeometry from 'three-hilbert-geometry';
 
-import { MAX_LABEL_FONT_SIZE } from './utils/label-atlas';
-const MAX_CUBE_LABEL_FONT_SIZE = 0.5;
+const { orientations: HILBERT_ORIENTATIONS, transitions: HILBERT_ORIENTATION_TRANSITIONS } = (() => {
+  const CHILD_PERMUTATIONS = [
+    [0, 3, 4, 7, 6, 5, 2, 1],
+    [0, 7, 6, 1, 2, 5, 4, 3],
+    [0, 7, 6, 1, 2, 5, 4, 3],
+    [2, 3, 0, 1, 6, 7, 4, 5],
+    [2, 3, 0, 1, 6, 7, 4, 5],
+    [4, 3, 2, 5, 6, 1, 0, 7],
+    [4, 3, 2, 5, 6, 1, 0, 7],
+    [6, 5, 2, 1, 0, 3, 4, 7]
+  ];
 
-const CHILD_PERMUTATIONS = [
-  [0, 3, 4, 7, 6, 5, 2, 1],
-  [0, 7, 6, 1, 2, 5, 4, 3],
-  [0, 7, 6, 1, 2, 5, 4, 3],
-  [2, 3, 0, 1, 6, 7, 4, 5],
-  [2, 3, 0, 1, 6, 7, 4, 5],
-  [4, 3, 2, 5, 6, 1, 0, 7],
-  [4, 3, 2, 5, 6, 1, 0, 7],
-  [6, 5, 2, 1, 0, 3, 4, 7]
-];
-
-const { orientations: HILBERT_ORIENTATIONS, transitions: HILBERT_ORIENTATION_TRANSITIONS } = createOrientationTables();
-
-function createOrientationTables() {
   const orientations = [[0, 1, 2, 3, 4, 5, 6, 7]];
   const transitions = [];
   const orientationIds = new Map([[orientations[0].join(''), 0]]);
@@ -38,12 +33,12 @@ function createOrientationTables() {
     transitions.push(childTransitions);
   }
   return { orientations, transitions };
-}
+})();
 
 function createHilbertGeometries({
   useInstancing = true,
-  data,
   order,
+  data,
   paddingAccessor,
   paddingAbsoluteAccessor,
   simplifyCurves
@@ -241,9 +236,6 @@ function mapLabelUVs(geometry) {
   const positions = geometry.getAttribute('position');
   const points = geometry.parameters?.points;
   const labelAspects = new Float32Array(uvs.count);
-  const labelMaxFontSizes = new Float32Array(uvs.count).fill(MAX_LABEL_FONT_SIZE);
-  const labelReverse = new Float32Array(uvs.count);
-  const uTurnInteriorFaces = getUTurnInteriorFaces(points, positions);
   const sideQuads = [];
   if (points?.length > 1) {
     const sideQuadCount = (points.length - 1) * 4;
@@ -280,11 +272,6 @@ function mapLabelUVs(geometry) {
   const sideQuadVertices = new Set(sideQuads.map(({ vertex }) => vertex));
 
   sideQuads.forEach(({ vertex, minU, maxU, minV, maxV }, index) => {
-    for (let corner = 0; corner < 4; corner++) labelReverse[vertex + corner] = 1;
-    if (uTurnInteriorFaces.has(vertex)) {
-      for (let corner = 0; corner < 4; corner++) uvs.setX(vertex + corner, -1);
-      return;
-    }
     if (positions && !isRectangularFace(positions, vertex)) {
       for (let corner = 0; corner < 4; corner++) uvs.setX(vertex + corner, -1);
       return;
@@ -325,12 +312,12 @@ function mapLabelUVs(geometry) {
       const positionIndex = vertex + corner;
       const alongLabel = (projectedDistances[corner] - minDistance) / labelLength;
       const sidePosition = uvs.getX(positionIndex);
-      uvs.setXY(positionIndex, 1 - alongLabel, 1 - (sidePosition - minU) / (maxU - minU));
+      uvs.setXY(positionIndex, alongLabel, 1 - (sidePosition - minU) / (maxU - minU));
     }
   });
 
   if (!sideQuads.length) {
-    mapSingleCellSideUVs(geometry, uvs, labelAspects, labelMaxFontSizes);
+    mapSingleCellSideUVs(geometry, uvs, labelAspects);
   } else {
     for (let vertex = 0; vertex + 3 < uvs.count; vertex += 4) {
       if (sideQuadVertices.has(vertex)) continue;
@@ -339,45 +326,10 @@ function mapLabelUVs(geometry) {
       }
     }
   }
-  geometry.setAttribute('atlasLabelAspect', new three.Float32BufferAttribute(labelAspects, 1));
-  geometry.setAttribute('atlasLabelMaxFontSize', new three.Float32BufferAttribute(labelMaxFontSizes, 1));
-  geometry.setAttribute('atlasLabelReverse', new three.Float32BufferAttribute(labelReverse, 1));
+  geometry.setAttribute('aspectRatio', new three.Float32BufferAttribute(labelAspects, 1));
   uvs.needsUpdate = true;
 
   //
-
-  function getUTurnInteriorFaces(points, positions) {
-    const hiddenFaces = new Set();
-    if (!points || points.length < 4 || !positions) return hiddenFaces;
-
-    const directions = points.slice(1).map((point, index) => point.clone().sub(points[index]).normalize());
-    for (let middleSegment = 1; middleSegment < directions.length - 1; middleSegment++) {
-      const incoming = directions[middleSegment - 1];
-      const middle = directions[middleSegment];
-      const outgoing = directions[middleSegment + 1];
-      if (incoming.dot(outgoing) > -0.999999 || Math.abs(incoming.dot(middle)) > 1e-6) continue;
-
-      const interiorNormals = [
-        { segment: middleSegment - 1, normal: middle },
-        { segment: middleSegment, normal: incoming.clone().negate() },
-        { segment: middleSegment + 1, normal: middle }
-      ];
-      interiorNormals.forEach(({ segment, normal }) => {
-        const pathCenter = points[segment].clone().add(points[segment + 1]).multiplyScalar(0.5);
-        for (let side = 0; side < 4; side++) {
-          const vertex = (segment * 4 + side) * 4;
-          const faceCenter = new three.Vector3();
-          for (let corner = 0; corner < 4; corner++) {
-            faceCenter.add(new three.Vector3().fromBufferAttribute(positions, vertex + corner));
-          }
-          faceCenter.multiplyScalar(0.25).sub(pathCenter);
-          faceCenter.addScaledVector(directions[segment], -faceCenter.dot(directions[segment]));
-          if (faceCenter.lengthSq() > 0 && faceCenter.normalize().dot(normal) > 0.9) hiddenFaces.add(vertex);
-        }
-      });
-    }
-    return hiddenFaces;
-  }
 
   function isRectangularFace(positions, vertex) {
     const corners = Array.from({ length: 4 }, (_, corner) => new three.Vector3().fromBufferAttribute(positions, vertex + corner));
@@ -390,7 +342,7 @@ function mapLabelUVs(geometry) {
     return oppositeEdgesMatch && adjacentEdgesPerpendicular;
   }
 
-  function mapSingleCellSideUVs(geometry, uvs, labelAspects, labelMaxFontSizes) {
+  function mapSingleCellSideUVs(geometry, uvs, labelAspects) {
     const positions = geometry.getAttribute('position');
     const normals = geometry.getAttribute('normal');
     if (!positions || !normals || positions.count !== 24) return;
@@ -424,7 +376,6 @@ function mapLabelUVs(geometry) {
         const up = positions.getY(index) * upY + positions.getZ(index) * upZ;
         uvs.setXY(index, (right - minRight) / (maxRight - minRight), (up - minUp) / (maxUp - minUp));
         labelAspects[index] = (maxRight - minRight) / (maxUp - minUp);
-        labelMaxFontSizes[index] = MAX_CUBE_LABEL_FONT_SIZE;
       }
     }
   }
