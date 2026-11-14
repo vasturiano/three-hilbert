@@ -260,7 +260,7 @@ export default class LabelAtlas {
   }
 
   dispose() {
-    this.glyphTexture.dispose();
-    this.labelTexture.dispose();
+    this.glyphTexture?.dispose();
+    this.labelTexture?.dispose();
   }
 }
