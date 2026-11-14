@@ -55,8 +55,7 @@ const ThreeHilbert = Kapsule({
 
     const instancedG = state.instancedG = new three.Group();
     state.scene.add(instancedG);
-    state.instancedDataMapper = new ThreeDigest(instancedG, { objBindAttr: '__threeObjHilbert' })
-      .onCreateObj(mesh => mesh);
+    state.instancedDataMapper = new ThreeDigest(instancedG, { objBindAttr: '__threeObjHilbert' });
 
     const fallbackG = new three.Group();
     state.scene.add(fallbackG);
@@ -83,7 +82,7 @@ const ThreeHilbert = Kapsule({
       simplifyCurves: state.simplifyCurves
     });
 
-    const instancedMeshes = [];
+    const instancedMeshes = new Map();
     instancedGeometries.forEach(geometryBatch => {
       const colorBatches = new Map();
       geometryBatch.instances.forEach(instance => {
@@ -115,13 +114,15 @@ const ThreeHilbert = Kapsule({
         });
         mesh.instanceMatrix.needsUpdate = true;
         mesh.computeBoundingSphere();
-        mesh.__data = instances.map(instance => instance.data);
-        instancedMeshes.push(mesh);
+        const data = instances.map(instance => instance.data);
+        instancedMeshes.set(data, mesh);
       });
       geometryBatch.geometry.dispose();
     });
 
-    state.instancedDataMapper.digest(instancedMeshes);
+    state.instancedDataMapper
+      .onCreateObj(d => instancedMeshes.get(d))
+      .digest([...instancedMeshes.keys()]);
 
     [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d]));
     state.fallbackDataMapper
