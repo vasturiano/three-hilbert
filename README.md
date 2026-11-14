@@ -40,10 +40,10 @@ All properties are getter/setters: call a method without an argument to read its
 | Method | Description | Default |
 | --- | --- | --- |
 | `order([number])` | Hilbert curve order. The curve has `8 ** order` positions. | `4` |
-| `data([array])` | Array of segment records. Each record must have numeric `start` and `length` values; additional fields can be used by accessors. | `[]` |
+| `data([array])` | Array of segment records. Each record must have `start` and `length` values that are both numbers or both `bigint`s; additional fields can be used by accessors. | `[]` |
 | `padding([accessor])` | Per-segment padding passed to the curve geometry. Accepts a constant, a property name, or a function of the datum. | `0` |
 | `paddingAbsolute([accessor])` | Per-segment absolute padding as a fraction of the full Hilbert width. Clamped to half the line width. Accepts a constant, a property name, or a function of the datum. | `0` |
-| `color([accessor])` | Segment color as a constant, property name, or function of the datum. Without a color, segments are colored by their `label` value using an ordinal palette. | Automatic |
+| `color([accessor])` | Segment color as a property name, or function of the datum. Without a color, segments are colored by their `label` value using an ordinal palette. | Automatic |
 | `label([accessor])` | Datum value used to label and group segments for automatic coloring. Accepts a constant, property name, or function of the datum. | `'name'` |
 | `labelColor([accessor])` | Label color accessor. A falsy value disables the label. | `'white'` |
 | `simplifyCurves([boolean])` | Whether to simplify the segment geometry whenever possible, to improve rendering performance. | `true` |

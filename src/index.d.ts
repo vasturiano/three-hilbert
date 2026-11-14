@@ -1,16 +1,19 @@
 import { Box3, Group, Vector3 } from 'three';
 
-export interface ThreeHilbertData {
-  start: number | bigint;
-  length: number | bigint;
+export interface ThreeHilbertData<Range extends number | bigint = number> {
+  start: Range;
+  length: Range;
+  [key: string]: unknown;
 }
+
+type SupportedData = ThreeHilbertData<number> | ThreeHilbertData<bigint>;
 
 export type Accessor<T, Value> =
   | Value
   | string
   | ((datum: T) => Value);
 
-declare class ThreeHilbert<T extends ThreeHilbertData = ThreeHilbertData> extends Group {
+declare class ThreeHilbert<T extends SupportedData = SupportedData> extends Group {
   constructor();
 
   order(): number;
@@ -31,8 +34,8 @@ declare class ThreeHilbert<T extends ThreeHilbertData = ThreeHilbertData> extend
   label(): Accessor<T, string>;
   label(value: Accessor<T, string>): this;
 
-  labelColor(): Accessor<T, string | number | false>;
-  labelColor(value: Accessor<T, string | number | false>): this;
+  labelColor(): Accessor<T, string | number | false | null>;
+  labelColor(value: Accessor<T, string | number | false | null>): this;
 
   simplifyCurves(): boolean;
   simplifyCurves(value: boolean): this;
@@ -41,7 +44,8 @@ declare class ThreeHilbert<T extends ThreeHilbertData = ThreeHilbertData> extend
   useInstancedMeshes(value: boolean): this;
 
   getPositionAtVal(value: number | bigint): Vector3;
-  getRangeBbox(start: number | bigint, length: number | bigint): Box3;
+  getRangeBbox(start: number, length: number): Box3;
+  getRangeBbox(start: bigint, length: bigint): Box3;
 }
 
 export default ThreeHilbert;
