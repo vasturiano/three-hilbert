@@ -284,22 +284,33 @@ function mapLabelUVs(geometry) {
     const dy = endPoint ? endPoint.y - startPoint.y : 0;
     const dz = endPoint ? endPoint.z - startPoint.z : 0;
     const segmentLength = Math.hypot(dx, dy, dz);
-    const projectedDistances = Array.from({ length: 4 }, (_, corner) => {
-      const positionIndex = vertex + corner;
-      return positions && startPoint && segmentLength
-        ? ((positions.getX(positionIndex) - startPoint.x) * dx
-        + (positions.getY(positionIndex) - startPoint.y) * dy
-        + (positions.getZ(positionIndex) - startPoint.z) * dz) / segmentLength
-        : segmentLength * (uvs.getY(positionIndex) - minV) / (maxV - minV);
-    });
-    const minDistance = Math.min(...projectedDistances);
-    const maxDistance = Math.max(...projectedDistances);
+    const distance0 = positions && startPoint && segmentLength
+      ? ((positions.getX(vertex) - startPoint.x) * dx
+      + (positions.getY(vertex) - startPoint.y) * dy
+      + (positions.getZ(vertex) - startPoint.z) * dz) / segmentLength
+      : segmentLength * (uvs.getY(vertex) - minV) / (maxV - minV);
+    const distance1 = positions && startPoint && segmentLength
+      ? ((positions.getX(vertex + 1) - startPoint.x) * dx
+      + (positions.getY(vertex + 1) - startPoint.y) * dy
+      + (positions.getZ(vertex + 1) - startPoint.z) * dz) / segmentLength
+      : segmentLength * (uvs.getY(vertex + 1) - minV) / (maxV - minV);
+    const distance2 = positions && startPoint && segmentLength
+      ? ((positions.getX(vertex + 2) - startPoint.x) * dx
+      + (positions.getY(vertex + 2) - startPoint.y) * dy
+      + (positions.getZ(vertex + 2) - startPoint.z) * dz) / segmentLength
+      : segmentLength * (uvs.getY(vertex + 2) - minV) / (maxV - minV);
+    const distance3 = positions && startPoint && segmentLength
+      ? ((positions.getX(vertex + 3) - startPoint.x) * dx
+      + (positions.getY(vertex + 3) - startPoint.y) * dy
+      + (positions.getZ(vertex + 3) - startPoint.z) * dz) / segmentLength
+      : segmentLength * (uvs.getY(vertex + 3) - minV) / (maxV - minV);
+    const minDistance = Math.min(distance0, distance1, distance2, distance3);
+    const maxDistance = Math.max(distance0, distance1, distance2, distance3);
     const labelLength = maxDistance - minDistance;
-    const sideWidth = positions
-      ? new three.Vector3().fromBufferAttribute(positions, vertex).distanceTo(
-        new three.Vector3().fromBufferAttribute(positions, vertex + 1)
-      )
-      : 0;
+    const edgeX = positions ? positions.getX(vertex + 1) - positions.getX(vertex) : 0;
+    const edgeY = positions ? positions.getY(vertex + 1) - positions.getY(vertex) : 0;
+    const edgeZ = positions ? positions.getZ(vertex + 1) - positions.getZ(vertex) : 0;
+    const sideWidth = Math.sqrt(edgeX * edgeX + edgeY * edgeY + edgeZ * edgeZ);
     if (sideWidth > 0) {
       for (let corner = 0; corner < 4; corner++) labelAspects[vertex + corner] = labelLength / sideWidth;
     }
@@ -310,7 +321,8 @@ function mapLabelUVs(geometry) {
 
     for (let corner = 0; corner < 4; corner++) {
       const positionIndex = vertex + corner;
-      const alongLabel = (projectedDistances[corner] - minDistance) / labelLength;
+      const distance = corner === 0 ? distance0 : corner === 1 ? distance1 : corner === 2 ? distance2 : distance3;
+      const alongLabel = (distance - minDistance) / labelLength;
       const sidePosition = uvs.getX(positionIndex);
       uvs.setXY(positionIndex, alongLabel, 1 - (sidePosition - minU) / (maxU - minU));
     }

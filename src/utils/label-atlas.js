@@ -11,6 +11,34 @@ const MIN_LABEL_FONT_SIZE = 0.05;
 const MAX_LABEL_WIDTH = 0.92;
 const LABEL_CHARACTER_ADVANCE = 0.8;
 
+let glyphTexture;
+function getGlyphTexture() {
+  if (glyphTexture) return glyphTexture;
+
+  const glyphCanvas = document.createElement('canvas');
+  glyphCanvas.width = GLYPHS_PER_ROW * GLYPH_SIZE;
+  glyphCanvas.height = GLYPHS_PER_ROW * GLYPH_SIZE;
+  const glyphContext = glyphCanvas.getContext('2d');
+  if (!glyphContext) throw new Error('Unable to create canvas context for label glyphs');
+  glyphContext.font = 'bold 64px monospace';
+  glyphContext.textAlign = 'center';
+  glyphContext.textBaseline = 'middle';
+  for (let code = 0; code < GLYPH_COUNT; code++) {
+    const character = String.fromCharCode(code);
+    if (code < 32 || code === 127) continue;
+    const x = (code % GLYPHS_PER_ROW) * GLYPH_SIZE + GLYPH_SIZE / 2;
+    const y = Math.floor(code / GLYPHS_PER_ROW) * GLYPH_SIZE + GLYPH_SIZE / 2;
+    glyphContext.fillStyle = '#fff';
+    glyphContext.fillText(character, x, y);
+  }
+
+  glyphTexture = new three.CanvasTexture(glyphCanvas);
+  glyphTexture.magFilter = three.LinearFilter;
+  glyphTexture.minFilter = three.LinearFilter;
+  if (three.SRGBColorSpace) glyphTexture.colorSpace = three.SRGBColorSpace;
+  return glyphTexture;
+}
+
 export default class LabelAtlas {
   constructor(data, labelAccessor, labelColorAccessor) {
     const labelIds = new Map();
@@ -41,27 +69,7 @@ export default class LabelAtlas {
     this.labelCount = labelIds.size;
     if (!this.labelCount) return;
 
-    const glyphCanvas = document.createElement('canvas');
-    glyphCanvas.width = GLYPHS_PER_ROW * GLYPH_SIZE;
-    glyphCanvas.height = GLYPHS_PER_ROW * GLYPH_SIZE;
-    const glyphContext = glyphCanvas.getContext('2d');
-    if (!glyphContext) throw new Error('Unable to create canvas context for label glyphs');
-    glyphContext.font = 'bold 64px monospace';
-    glyphContext.textAlign = 'center';
-    glyphContext.textBaseline = 'middle';
-    for (let code = 0; code < GLYPH_COUNT; code++) {
-      const character = String.fromCharCode(code);
-      if (code < 32 || code === 127) continue;
-      const x = (code % GLYPHS_PER_ROW) * GLYPH_SIZE + GLYPH_SIZE / 2;
-      const y = Math.floor(code / GLYPHS_PER_ROW) * GLYPH_SIZE + GLYPH_SIZE / 2;
-      glyphContext.fillStyle = '#fff';
-      glyphContext.fillText(character, x, y);
-    }
-
-    this.glyphTexture = new three.CanvasTexture(glyphCanvas);
-    this.glyphTexture.magFilter = three.LinearFilter;
-    this.glyphTexture.minFilter = three.LinearFilter;
-    if (three.SRGBColorSpace) this.glyphTexture.colorSpace = three.SRGBColorSpace;
+    this.glyphTexture = getGlyphTexture();
 
     this.labelsPerRow = 128;
     const textureWidth = this.labelsPerRow * MAX_LABEL_CHARS;
@@ -260,7 +268,6 @@ export default class LabelAtlas {
   }
 
   dispose() {
-    this.glyphTexture?.dispose();
     this.labelTexture?.dispose();
   }
 }
