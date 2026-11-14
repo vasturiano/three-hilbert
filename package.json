@@ -1,6 +1,6 @@
 {
   "name": "three-hilbert",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "3D Hilbert curve data visualization as a ThreeJS reusable object",
   "type": "module",
   "unpkg": "dist/three-hilbert.min.js",
