@@ -73,14 +73,16 @@ const ThreeHilbert = Kapsule({
 
     const labelAtlas = new LabelAtlas(state.data, labelAccessor, labelColorAccessor);
 
-    const { instancedGeometries, fallbackGeometries } = createHilbertGeometries({
-      useInstancing: state.useInstancedMeshes,
-      data: state.data,
-      order: state.order,
-      paddingAccessor,
-      paddingAbsoluteAccessor,
-      simplifyCurves: state.simplifyCurves
-    });
+    const { instancedGeometries, fallbackGeometries } = (['useInstancedMeshes', 'data', 'order', 'padding', 'paddingAbsolute', 'simplifyCurves'].some(p => changedProps.hasOwnProperty(p)))
+      ? state.prevHilbertGeometries = createHilbertGeometries({
+          useInstancing: state.useInstancedMeshes,
+          data: state.data,
+          order: state.order,
+          paddingAccessor,
+          paddingAbsoluteAccessor,
+          simplifyCurves: state.simplifyCurves
+      })
+      : state.prevHilbertGeometries;
 
     const instancedMeshes = new Map();
     instancedGeometries.forEach(geometryBatch => {
