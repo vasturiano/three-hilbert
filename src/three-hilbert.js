@@ -95,39 +95,26 @@ const ThreeHilbert = Kapsule({
 
     const instancedMeshes = new Map();
     instancedGeometries.forEach(geometryBatch => {
-      const colorBatches = new Map();
-      geometryBatch.instances.forEach(instance => {
-        // split by color
-        const color = getColor(instance.data);
-        let batch = colorBatches.get(color);
-        if (!batch) {
-          batch = { material: labelAtlas.getMaterial(color), instances: [] };
-          colorBatches.set(color, batch);
-        }
-        batch.instances.push(instance);
+      const { instances } = geometryBatch;
+      const geometry = geometryBatch.geometry.clone();
+      const data = instances.map(instance => instance.data);
+      labelAtlas.tagGeometry(geometry, data, true, getColor);
+      const transparent = geometry.getAttribute('opacity').array.some(o => o < 1);
+      const mesh = new three.InstancedMesh(geometry, labelAtlas.getMaterial(transparent), instances.length);
+      const matrices = mesh.instanceMatrix.array;
+      instances.forEach(({ scale, position }, i) => {
+        const matrixOffset = i * 16;
+        matrices[matrixOffset] = scale;
+        matrices[matrixOffset + 5] = scale;
+        matrices[matrixOffset + 10] = scale;
+        matrices[matrixOffset + 12] = position.x;
+        matrices[matrixOffset + 13] = position.y;
+        matrices[matrixOffset + 14] = position.z;
+        matrices[matrixOffset + 15] = 1;
       });
-
-      colorBatches.forEach(({ material, instances }) => {
-        const geometry = geometryBatch.geometry.clone();
-        labelAtlas.tagGeometry(geometry, instances.map(instance => instance.data), true);
-
-        const mesh = new three.InstancedMesh(geometry, material, instances.length);
-        const matrices = mesh.instanceMatrix.array;
-        instances.forEach(({ scale, position }, i) => {
-          const matrixOffset = i * 16;
-          matrices[matrixOffset] = scale;
-          matrices[matrixOffset + 5] = scale;
-          matrices[matrixOffset + 10] = scale;
-          matrices[matrixOffset + 12] = position.x;
-          matrices[matrixOffset + 13] = position.y;
-          matrices[matrixOffset + 14] = position.z;
-          matrices[matrixOffset + 15] = 1;
-        });
-        mesh.instanceMatrix.needsUpdate = true;
-        mesh.computeBoundingSphere();
-        const data = instances.map(instance => instance.data);
-        instancedMeshes.set(data, mesh);
-      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      instancedMeshes.set(data, mesh);
       geometryBatch.geometry.dispose();
     });
 
@@ -135,14 +122,16 @@ const ThreeHilbert = Kapsule({
       .onCreateObj(d => instancedMeshes.get(d))
       .digest([...instancedMeshes.keys()]);
 
-    (geometriesChanged || atlasChanged) && [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d]));
+    [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d], false, getColor));
     state.fallbackDataMapper
       .onUpdateObj((obj, d) => {
         if(geometriesChanged) {
           obj.geometry?.dispose();
           obj.geometry = fallbackGeometries.get(d);
         }
-        obj.material = labelAtlas.getMaterial(getColor(d));
+
+        const transparent = obj.geometry.getAttribute('opacity').array.some(o => o < 1);
+        obj.material = labelAtlas.getMaterial(transparent);
       })
       .digest([...fallbackGeometries.keys()]);
   }

@@ -56,7 +56,7 @@ export default class LabelAtlas {
   constructor(data, labelAccessor, labelColorAccessor) {
     const labelIds = new Map();
     this.labels = new WeakMap();
-    this.materialCache = new Map();
+    this.materials = new Map();
     data.forEach(d => {
       const label = labelAccessor(d);
       const color = labelColorAccessor(d);
@@ -115,14 +115,30 @@ export default class LabelAtlas {
     return this.labelCount === 0;
   }
 
-  tagGeometry(geometry, records, instanced = false) {
-    if (this.isEmpty()) return;
-
+  tagGeometry(geometry, records, instanced = false, colorAccessor) {
     const vertexCount = geometry.getAttribute('position').count;
     const count = instanced ? records.length : vertexCount;
     const makeAttribute = (array, itemSize) => instanced
       ? new three.InstancedBufferAttribute(array, itemSize)
       : new three.Float32BufferAttribute(array, itemSize);
+
+    if (colorAccessor) {
+      const backgroundColors = new Float32Array(count * 3);
+      const opacities = new Float32Array(count);
+      records.forEach((record, index) => {
+        const { color, opacity } = getMaterialColor(colorAccessor(record));
+        const start = instanced ? index : 0;
+        const end = instanced ? index + 1 : count;
+        for (let i = start; i < end; i++) {
+          color.toArray(backgroundColors, i * 3);
+          opacities[i] = opacity;
+        }
+      });
+      geometry.setAttribute('backgroundColor', makeAttribute(backgroundColors, 3));
+      geometry.setAttribute('opacity', makeAttribute(opacities, 1));
+    }
+
+    if (this.isEmpty()) return;
 
     const ids = new Float32Array(count);
     const lengths = new Float32Array(count);
@@ -157,32 +173,22 @@ export default class LabelAtlas {
     }
   }
 
-  getMaterial(color) {
-    let material = this.materialCache.get(color);
+  getMaterial(transparent = false) {
+    let material = this.materials.get(transparent);
     if (material) return material;
 
-    material = new three.MeshLambertMaterial();
-    this.materialCache.set(color, material);
-
-    const { color: matColor, opacity } = getMaterialColor(color);
-    material.color.set(matColor);
-    material.transparent = opacity < 1;
-    material.opacity = opacity;
-
-    if (!this.isEmpty()) {
-      material.onBeforeCompile = shader => {
-        shader.uniforms.labelGlyphTexture = {value: this.glyphTexture};
-        shader.uniforms.labelDataTexture = {value: this.labelTexture};
-        shader.uniforms.labelDataTextureSize = {
-          value: new three.Vector2(this.labelTexture.image.width, this.labelTexture.image.height)
-        };
-        shader.uniforms.labelLabelsPerRow = {value: this.labelsPerRow};
-
-        shader.vertexShader = shader.vertexShader
-          .replace(
-            '#include <common>',
-            `#include <common>
-         attribute float aspectRatio;
+    material = new three.MeshLambertMaterial({ transparent });
+    this.materials.set(transparent, material);
+    material.onBeforeCompile = shader => {
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+         attribute vec3 backgroundColor;
+         attribute float opacity;
+         varying vec3 vBackgroundColor;
+         varying float vOpacity;
+         ${!this.isEmpty() ? `attribute float aspectRatio;
          attribute vec4 labelColor;
          attribute float labelId;
          attribute float labelLength;
@@ -190,23 +196,27 @@ export default class LabelAtlas {
          varying vec4 vLabelColor;
          varying float vLabelId;
          varying float vLabelLength;
-         varying vec2 vLabelUv;`
-          )
-          .replace(
-            '#include <begin_vertex>',
-            `#include <begin_vertex>
-         vAspectRatio = aspectRatio;
+         varying vec2 vLabelUv;` : ''}`
+        )
+        .replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+         vBackgroundColor = backgroundColor;
+         vOpacity = opacity;
+         ${!this.isEmpty() ? `vAspectRatio = aspectRatio;
          vLabelColor = labelColor;
          vLabelId = labelId;
          vLabelLength = labelLength;
-         vLabelUv = uv;`
-          );
+         vLabelUv = uv;` : ''}`
+        );
 
-        shader.fragmentShader = shader.fragmentShader
-          .replace(
-            '#include <common>',
-            `#include <common>
-         uniform sampler2D labelGlyphTexture;
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+         varying vec3 vBackgroundColor;
+         varying float vOpacity;
+         ${!this.isEmpty() ? `uniform sampler2D labelGlyphTexture;
          uniform sampler2D labelDataTexture;
          uniform vec2 labelDataTextureSize;
          uniform float labelLabelsPerRow;
@@ -214,11 +224,32 @@ export default class LabelAtlas {
          varying vec4 vLabelColor;
          varying float vLabelId;
          varying float vLabelLength;
-         varying vec2 vLabelUv;`
-          )
-          .replace(
-            '#include <map_fragment>',
-            `#include <map_fragment>
+         varying vec2 vLabelUv;` : ''}`
+        )
+        .replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+         diffuseColor.rgb *= vBackgroundColor;
+         diffuseColor.a *= vOpacity;`
+        );
+
+      if (this.isEmpty()) return;
+
+      shader.uniforms.labelGlyphTexture = {value: this.glyphTexture};
+      shader.uniforms.labelDataTexture = {value: this.labelTexture};
+      shader.uniforms.labelDataTextureSize = {
+        value: new three.Vector2(this.labelTexture.image.width, this.labelTexture.image.height)
+      };
+      shader.uniforms.labelLabelsPerRow = {value: this.labelsPerRow};
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          `#include <map_fragment>
+         diffuseColor.rgb *= vBackgroundColor;
+         diffuseColor.a *= vOpacity;`,
+          `#include <map_fragment>
+         diffuseColor.rgb *= vBackgroundColor;
+         diffuseColor.a *= vOpacity;
          if (vLabelId >= 0.0 && vLabelUv.x >= 0.0 && vLabelUv.x <= 1.0) {
            float aspect = max(vAspectRatio, 0.001);
            float visibleLength = vLabelLength;
@@ -268,14 +299,14 @@ export default class LabelAtlas {
            }
          }`
         );
-      };
-      material.customProgramCacheKey = () => 'three-label-glyph-atlas';
-    }
+    };
+    material.customProgramCacheKey = () => `three-label-glyph-atlas-${this.isEmpty() ? 'empty' : 'labels'}-geometry-color-${transparent}`;
 
     return material;
   }
 
   dispose() {
     this.labelTexture?.dispose();
+    this.materials.forEach(material => material.dispose());
   }
 }
