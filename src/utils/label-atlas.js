@@ -39,6 +39,19 @@ function getGlyphTexture() {
   return glyphTexture;
 }
 
+const colorCache = new Map();
+function getMaterialColor(str) {
+  let materialColor = colorCache.get(str);
+  if (!materialColor) {
+    materialColor = {
+      color: new three.Color(colorStr2Hex(str)),
+      opacity: colorAlpha(str)
+    };
+    colorCache.set(str, materialColor);
+  }
+  return materialColor;
+}
+
 export default class LabelAtlas {
   constructor(data, labelAccessor, labelColorAccessor) {
     const labelIds = new Map();
@@ -116,14 +129,9 @@ export default class LabelAtlas {
     const colors = new Float32Array(count * 4);
     const dummyAspectRatio = new Float32Array(count);
     records.forEach((d, index) => {
-      if (!this.labels.has(d)) {
-        console.warn(`Label not found for record ${JSON.stringify(d)}. Skipping...`);
-        return;
-      }
       const label = this.labels.get(d);
-      const labelColor = label?.color;
-      const color = new three.Color(labelColor ? colorStr2Hex(labelColor) : 0xffffff);
-      const opacity = labelColor ? colorAlpha(labelColor) : 0;
+      if (!label) return;
+      const { color, opacity } = getMaterialColor(label.color);
       const id = label ? label.id : -1;
       const len = label ? label.length : 0;
       const start = instanced ? index : 0;
@@ -156,8 +164,8 @@ export default class LabelAtlas {
     material = new three.MeshLambertMaterial();
     this.materialCache.set(color, material);
 
-    const opacity = colorAlpha(color);
-    material.color.set(colorStr2Hex(color));
+    const { color: matColor, opacity } = getMaterialColor(color);
+    material.color.set(matColor);
     material.transparent = opacity < 1;
     material.opacity = opacity;
 
