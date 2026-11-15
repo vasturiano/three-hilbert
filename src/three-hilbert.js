@@ -40,6 +40,9 @@ const ThreeHilbert = Kapsule({
       bbox.min.multiplyScalar(SCALE);
       bbox.max.multiplyScalar(SCALE);
       return bbox;
+    },
+    _destructor: function() {
+      this.prevLabelAtlas?.dispose();
     }
   },
   stateInit() { return {
@@ -71,9 +74,15 @@ const ThreeHilbert = Kapsule({
     const labelColorAccessor = accessorFn(state.labelColor);
     const getColor = d => colorAccessor?.(d) || state.defaultColorScale(labelAccessor(d) || '');
 
-    const labelAtlas = new LabelAtlas(state.data, labelAccessor, labelColorAccessor);
+    const propsChanged = props => props.some(p => changedProps.hasOwnProperty(p));
+    const atlasChanged = propsChanged(['data', 'label', 'labelColor']);
+    const geometriesChanged = propsChanged(['useInstancedMeshes', 'data', 'order', 'padding', 'paddingAbsolute', 'simplifyCurves']);
 
-    const { instancedGeometries, fallbackGeometries } = (['useInstancedMeshes', 'data', 'order', 'padding', 'paddingAbsolute', 'simplifyCurves'].some(p => changedProps.hasOwnProperty(p)))
+    const labelAtlas = atlasChanged
+      ? state.prevLabelAtlas = (state.prevLabelAtlas?.dispose(), new LabelAtlas(state.data, labelAccessor, labelColorAccessor))
+      : state.prevLabelAtlas;
+
+    const { instancedGeometries, fallbackGeometries } = geometriesChanged
       ? state.prevHilbertGeometries = createHilbertGeometries({
           useInstancing: state.useInstancedMeshes,
           data: state.data,
@@ -126,16 +135,16 @@ const ThreeHilbert = Kapsule({
       .onCreateObj(d => instancedMeshes.get(d))
       .digest([...instancedMeshes.keys()]);
 
-    [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d]));
+    (geometriesChanged || atlasChanged) && [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d]));
     state.fallbackDataMapper
       .onUpdateObj((obj, d) => {
-        obj.geometry?.dispose();
-        obj.geometry = fallbackGeometries.get(d);
+        if(geometriesChanged) {
+          obj.geometry?.dispose();
+          obj.geometry = fallbackGeometries.get(d);
+        }
         obj.material = labelAtlas.getMaterial(getColor(d));
       })
       .digest([...fallbackGeometries.keys()]);
-
-    labelAtlas.dispose();
   }
 });
 
