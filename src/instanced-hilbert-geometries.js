@@ -81,7 +81,9 @@ function createHilbertGeometries({
     batch.instances.push({ data: d, position: points[0], scale });
   });
 
-  const instancedGeometries = Array.from(batches.values());
+  const instancedGeometries = new Map(Array.from(batches.values()).map(
+    batch => [batch.instances.map(i => i.data), batch]
+  ));
   instancedGeometries.forEach(batch => {
     const sourceGeometry = batch.geometry;
     batch.geometry = createTemplateGeometry(sourceGeometry, batch.origin, batch.scale);
