@@ -115,18 +115,22 @@ export default class LabelAtlas {
     return this.labelCount === 0;
   }
 
-  tagGeometry(geometry, records, instanced = false, colorAccessor) {
+  tagGeometry(geometry, records, {
+    instanced = false,
+    backgroundColorAccessor,
+    recomputeLabels = true
+    } = {}) {
     const vertexCount = geometry.getAttribute('position').count;
     const count = instanced ? records.length : vertexCount;
     const makeAttribute = (array, itemSize) => instanced
       ? new three.InstancedBufferAttribute(array, itemSize)
       : new three.Float32BufferAttribute(array, itemSize);
 
-    if (colorAccessor) {
+    if (backgroundColorAccessor) {
       const backgroundColors = new Float32Array(count * 3);
       const opacities = new Float32Array(count);
       records.forEach((record, index) => {
-        const { color, opacity } = getMaterialColor(colorAccessor(record));
+        const { color, opacity } = getMaterialColor(backgroundColorAccessor(record));
         const start = instanced ? index : 0;
         const end = instanced ? index + 1 : count;
         for (let i = start; i < end; i++) {
@@ -138,38 +142,40 @@ export default class LabelAtlas {
       geometry.setAttribute('opacity', makeAttribute(opacities, 1));
     }
 
-    if (this.isEmpty()) return;
+    if (recomputeLabels) {
+      if (this.isEmpty()) return;
 
-    const ids = new Float32Array(count);
-    const lengths = new Float32Array(count);
-    const colors = new Float32Array(count * 4);
-    const dummyAspectRatio = new Float32Array(count);
-    records.forEach((d, index) => {
-      const label = this.labels.get(d);
-      if (!label) return;
-      const { color, opacity } = getMaterialColor(label.color);
-      const id = label ? label.id : -1;
-      const len = label ? label.length : 0;
-      const start = instanced ? index : 0;
-      const end = instanced ? index + 1 : count;
-      for (let i = start; i < end; i++) {
-        ids[i] = id;
-        lengths[i] = len;
-        colors[i * 4] = color.r;
-        colors[i * 4 + 1] = color.g;
-        colors[i * 4 + 2] = color.b;
-        colors[i * 4 + 3] = opacity;
-        dummyAspectRatio[i] = 2.0;
+      const ids = new Float32Array(count);
+      const lengths = new Float32Array(count);
+      const colors = new Float32Array(count * 4);
+      const dummyAspectRatio = new Float32Array(count);
+      records.forEach((d, index) => {
+        const label = this.labels.get(d);
+        if (!label) return;
+        const {color, opacity} = getMaterialColor(label.color);
+        const id = label ? label.id : -1;
+        const len = label ? label.length : 0;
+        const start = instanced ? index : 0;
+        const end = instanced ? index + 1 : count;
+        for (let i = start; i < end; i++) {
+          ids[i] = id;
+          lengths[i] = len;
+          colors[i * 4] = color.r;
+          colors[i * 4 + 1] = color.g;
+          colors[i * 4 + 2] = color.b;
+          colors[i * 4 + 3] = opacity;
+          dummyAspectRatio[i] = 2.0;
+        }
+      });
+
+      geometry.setAttribute('labelId', makeAttribute(ids, 1));
+      geometry.setAttribute('labelLength', makeAttribute(lengths, 1));
+      geometry.setAttribute('labelColor', makeAttribute(colors, 4));
+
+      if (!geometry.getAttribute('aspectRatio')) {
+        console.warn(`Geometry requires aspectRatio attribute. Setting 2.0 throughout the faces.`);
+        geometry.setAttribute('aspectRatio', makeAttribute(dummyAspectRatio, 1));
       }
-    });
-
-    geometry.setAttribute('labelId', makeAttribute(ids, 1));
-    geometry.setAttribute('labelLength', makeAttribute(lengths, 1));
-    geometry.setAttribute('labelColor', makeAttribute(colors, 4));
-
-    if (!geometry.getAttribute('aspectRatio')) {
-      console.warn(`Geometry requires aspectRatio attribute. Setting 2.0 throughout the faces.`);
-      geometry.setAttribute('aspectRatio', makeAttribute(dummyAspectRatio, 1));
     }
   }
 

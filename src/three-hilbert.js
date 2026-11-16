@@ -98,7 +98,11 @@ const ThreeHilbert = Kapsule({
       const { instances } = geometryBatch;
       const geometry = geometryBatch.geometry.clone();
       const data = instances.map(instance => instance.data);
-      labelAtlas.tagGeometry(geometry, data, true, getColor);
+      labelAtlas.tagGeometry(geometry, data, {
+        instanced: true,
+        backgroundColorAccessor: getColor,
+        _recomputeLabels: geometriesChanged || atlasChanged
+      });
       const transparent = geometry.getAttribute('opacity').array.some(o => o < 1);
       const mesh = new three.InstancedMesh(geometry, labelAtlas.getMaterial(transparent), instances.length);
       const matrices = mesh.instanceMatrix.array;
@@ -122,7 +126,10 @@ const ThreeHilbert = Kapsule({
       .onCreateObj(d => instancedMeshes.get(d))
       .digest([...instancedMeshes.keys()]);
 
-    [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d], false, getColor));
+    [...fallbackGeometries.entries()].forEach(([d, geometry]) => labelAtlas.tagGeometry(geometry, [d], {
+      backgroundColorAccessor: getColor,
+      _recomputeLabels: geometriesChanged || atlasChanged
+    }));
     state.fallbackDataMapper
       .onUpdateObj((obj, d) => {
         if(geometriesChanged) {
