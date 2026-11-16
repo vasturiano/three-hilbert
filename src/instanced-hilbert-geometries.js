@@ -1,5 +1,6 @@
 import * as three from 'three';
 import HilbertGeometry from 'three-hilbert-geometry';
+import accessorFn from "accessor-fn";
 
 const { orientations: HILBERT_ORIENTATIONS, transitions: HILBERT_ORIENTATION_TRANSITIONS } = (() => {
   const CHILD_PERMUTATIONS = [
@@ -46,10 +47,12 @@ function createHilbertGeometries({
   const geometryCache = new Map();
   const fallbackGeometries = new Map();
   const batches = new Map();
+  const useInstancingAccessor = accessorFn(useInstancing);
 
   data.forEach(d => {
     const padding = paddingAccessor(d);
     const paddingAbsolute = paddingAbsoluteAccessor(d);
+    const useInstancing = useInstancingAccessor(d);
 
     const description = useInstancing && getSimpleHilbertGeometry(order, d.start, d.length, padding, paddingAbsolute, simplifyCurves);
 

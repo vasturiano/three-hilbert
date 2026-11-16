@@ -40,8 +40,8 @@ declare class ThreeHilbert<T extends SupportedData = SupportedData> extends Grou
   simplifyCurves(): boolean;
   simplifyCurves(value: boolean): this;
 
-  useInstancedMeshes(): boolean;
-  useInstancedMeshes(value: boolean): this;
+  useInstancedMeshes(): Accessor<T, boolean>;
+  useInstancedMeshes(value: Accessor<T, boolean>): this;
 
   getPositionAtVal(value: number | bigint): Vector3;
   getRangeBbox(start: number, length: number): Box3;
