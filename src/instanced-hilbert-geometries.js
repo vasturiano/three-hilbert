@@ -1,4 +1,4 @@
-import * as three from 'three';
+import  { BoxGeometry, BufferGeometry, Float32BufferAttribute, Vector3 } from 'three';
 import HilbertGeometry from 'three-hilbert-geometry';
 import accessorFn from "accessor-fn";
 
@@ -100,12 +100,31 @@ function createHilbertGeometries({
 
 function createGeometry(order, datum, padding, paddingAbsolute, simplifyCurves) {
   const geometry = new HilbertGeometry(order, datum.start, datum.length, { padding, paddingAbsolute, simplifyCurves });
+
+  if (simplifyCurves && geometry.parameters?.points.length === 4) {
+    // Special case: simplify half-cube
+    geometry.computeBoundingBox();
+    const bbox = geometry.boundingBox.clone();
+    const size = new Vector3();
+    bbox.getSize(size);
+    if ((size.x !== size.y || size.x !== size.z)) { // make sure it's half-cube
+      const center = new Vector3();
+      bbox.getCenter(center);
+      const halfCube = new BoxGeometry(size.x, size.y, size.z);
+      halfCube.translate(center.x, center.y, center.z);
+
+      geometry.dispose();
+      geometry.index = halfCube.index;
+      geometry.attributes = halfCube.attributes;
+    }
+  }
+
   mapLabelUVs(geometry);
   return geometry;
 }
 
 function createTemplateGeometry(geometry, origin, scale) {
-  const templateGeometry = new three.BufferGeometry();
+  const templateGeometry = new BufferGeometry();
   Object.entries(geometry.attributes).forEach(([name, attribute]) => {
     templateGeometry.setAttribute(name, attribute.clone());
   });
@@ -239,10 +258,11 @@ function mapLabelUVs(geometry) {
   if (!uvs) return;
 
   const positions = geometry.getAttribute('position');
+  const index = geometry.getIndex();
   const points = geometry.parameters?.points;
   const labelAspects = new Float32Array(uvs.count);
   const sideQuads = [];
-  if (points?.length > 1) {
+  if (points?.length > 1 && !(points.length === 4 && index.count === 36)) {
     const sideQuadCount = (points.length - 1) * 4;
     for (let vertex = 0; vertex + 3 < uvs.count && vertex / 4 < sideQuadCount; vertex += 4) {
       let minU = Infinity;
@@ -258,7 +278,7 @@ function mapLabelUVs(geometry) {
       if (maxU <= minU || maxV === minV) continue;
       sideQuads.push({ vertex, minU, maxU, minV, maxV });
     }
-  } else {
+  } else { // cube or half-cube
     for (let vertex = 0; vertex + 3 < uvs.count; vertex += 4) {
       let minU = Infinity;
       let maxU = -Infinity;
@@ -343,13 +363,13 @@ function mapLabelUVs(geometry) {
       }
     }
   }
-  geometry.setAttribute('aspectRatio', new three.Float32BufferAttribute(labelAspects, 1));
+  geometry.setAttribute('aspectRatio', new Float32BufferAttribute(labelAspects, 1));
   uvs.needsUpdate = true;
 
   //
 
   function isRectangularFace(positions, vertex) {
-    const corners = Array.from({ length: 4 }, (_, corner) => new three.Vector3().fromBufferAttribute(positions, vertex + corner));
+    const corners = Array.from({ length: 4 }, (_, corner) => new Vector3().fromBufferAttribute(positions, vertex + corner));
     const edges = corners.map((corner, index) => corners[(index + 1) % 4].clone().sub(corner));
     const scale = Math.max(...edges.map(edge => edge.length()));
     const tolerance = scale * 1e-4;
@@ -387,12 +407,23 @@ function mapLabelUVs(geometry) {
         maxUp = Math.max(maxUp, up);
       }
 
+      const rightExtent = maxRight - minRight;
+      const upExtent = maxUp - minUp;
+      const useUpAsHorizontal = upExtent > rightExtent;
+      const minHorizontal = useUpAsHorizontal ? minUp : minRight;
+      const minVertical = useUpAsHorizontal ? minRight : minUp;
+      const horizontalExtent = useUpAsHorizontal ? upExtent : rightExtent;
+      const verticalExtent = useUpAsHorizontal ? rightExtent : upExtent;
+
       for (let corner = 0; corner < 4; corner++) {
         const index = vertex + corner;
         const right = positions.getX(index) * rightX + positions.getZ(index) * rightZ;
         const up = positions.getY(index) * upY + positions.getZ(index) * upZ;
-        uvs.setXY(index, (right - minRight) / (maxRight - minRight), (up - minUp) / (maxUp - minUp));
-        labelAspects[index] = (maxRight - minRight) / (maxUp - minUp);
+        const horizontal = useUpAsHorizontal ? up : right;
+        const vertical = useUpAsHorizontal ? right : up;
+        const verticalUV = useUpAsHorizontal ? maxRight - right : vertical - minVertical;
+        uvs.setXY(index, (horizontal - minHorizontal) / horizontalExtent, verticalUV / verticalExtent);
+        labelAspects[index] = horizontalExtent / verticalExtent;
       }
     }
   }
