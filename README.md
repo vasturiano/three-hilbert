@@ -4,12 +4,14 @@
 [![Build Size][build-size-img]][build-size-url]
 [![NPM Downloads][npm-downloads-img]][npm-downloads-url]
 
+**three-hilbert** is a [Three.js](https://threejs.org/) object for visualizing data as segments along a 3D Hilbert curve.
+
 <p align="center">
    <a href="https://vasturiano.github.io/three-hilbert/example/basic/"><img width="70%" src="https://vasturiano.github.io/three-hilbert/example/basic/preview.png"></a>
 </p>
-
-**three-hilbert** is a [Three.js](https://threejs.org/) object for visualizing data as segments along a 3D Hilbert curve. Map each datum to a range on the curve, then add the object to a Three.js scene like any other `Group`.
-Uses [three-hilbert-geometry](https://github.com/vasturiano/three-hilbert-geometry) for computing the geometries of each segment.
+ 
+Map each datum to a range on the curve, then add the object to a Three.js scene like any other `Group`.
+Uses [three-hilbert-geometry](https://github.com/vasturiano/three-hilbert-geometry) for computing the geometries.
 
 See also the [standalone version](https://github.com/vasturiano/hilbert-chart-3d).
 
