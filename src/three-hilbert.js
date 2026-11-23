@@ -28,7 +28,7 @@ const ThreeHilbert = Kapsule({
   },
   methods: {
     getPositionAtVal: (state, val) => {
-      const g = new HilbertGeometry(state.order, val, 1);
+      const g = new HilbertGeometry(state.order, val, typeof val === 'bigint' ? 1n : 1);
       g.computeBoundingSphere();
       return g.boundingSphere.center.clone().multiplyScalar(SCALE);
     },
