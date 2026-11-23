@@ -131,6 +131,8 @@ const ThreeHilbert = Kapsule({
         if(geometriesChanged) {
           obj.geometry?.dispose();
           obj.geometry = fallbackGeometries.get(d);
+
+          obj.renderOrder = Number(d.length); // Draw larger objects later to reduce transparency issues
         }
 
         labelAtlas.tagGeometry(obj.geometry, [d], {
