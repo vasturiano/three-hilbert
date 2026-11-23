@@ -112,6 +112,12 @@ const ThreeHilbert = Kapsule({
         mesh.instanceMatrix.needsUpdate = true;
         mesh.computeBoundingSphere();
 
+        // Link instanced mesh to each datum
+        d.forEach((d, idx) => {
+          d.__threeObjHilbert = mesh;
+          d.__threeObjInstanceId = idx;
+        });
+
         return mesh;
       })
       .onUpdateObj((mesh, d) => {
