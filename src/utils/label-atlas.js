@@ -183,7 +183,10 @@ export default class LabelAtlas {
     let material = this.materials.get(transparent);
     if (material) return material;
 
-    material = new three.MeshLambertMaterial({ transparent });
+    material = new three.MeshLambertMaterial({
+      transparent,
+      side: three.DoubleSide
+    });
     this.materials.set(transparent, material);
     material.onBeforeCompile = shader => {
       shader.vertexShader = shader.vertexShader
