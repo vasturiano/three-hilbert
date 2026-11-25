@@ -44,7 +44,6 @@
   "dependencies": {
     "accessor-fn": "1",
     "d3-color": "1 - 3",
-    "d3-force-3d": "2 - 3",
     "d3-scale": "1 - 4",
     "d3-scale-chromatic": "1 - 3",
     "data-bind-mapper": "1",
