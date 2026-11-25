@@ -60,7 +60,7 @@ export default class LabelAtlas {
     data.forEach(d => {
       const label = labelAccessor(d);
       const color = labelColorAccessor(d);
-      if (!label || !color) return;
+      if (!label || color === false || color == null) return;
 
       const characters = Array.from(String(label));
       const text = characters.length > MAX_LABEL_CHARS

@@ -72,7 +72,7 @@ const ThreeHilbert = Kapsule({
     const colorAccessor = accessorFn(state.color);
     const labelAccessor = accessorFn(state.label);
     const labelColorAccessor = accessorFn(state.labelColor);
-    const getColor = d => colorAccessor?.(d) || state.defaultColorScale(labelAccessor(d) || '');
+    const getColor = d => colorAccessor?.(d) ?? state.defaultColorScale(labelAccessor(d) || '');
 
     const propsChanged = props => props.some(p => changedProps.hasOwnProperty(p));
     const atlasChanged = propsChanged(['data', 'label', 'labelColor']);
