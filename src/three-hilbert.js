@@ -58,7 +58,14 @@ const ThreeHilbert = Kapsule({
 
     const instancedG = state.instancedG = new three.Group();
     state.scene.add(instancedG);
-    state.instancedDataMapper = new ThreeDigest(instancedG, { objBindAttr: '__threeObjHilbert' });
+    state.instancedDataMapper = new ThreeDigest(instancedG, { objBindAttr: '__threeObjHilbert' })
+      .onRemoveObj((mesh, records) => {
+        records.forEach(d => {
+          if (d.__threeObjHilbert !== mesh) return;
+          delete d.__threeObjHilbert;
+          delete d.__threeObjInstanceId;
+        });
+      });
 
     const fallbackG = new three.Group();
     state.scene.add(fallbackG);
